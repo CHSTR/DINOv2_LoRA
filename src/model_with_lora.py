@@ -4,13 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
+from .dinov2.layers.lora import LoRALayer
 from src.dinov2.models.vision_transformer import vit_base
 from experiments.options import opts
 
-from .utils import mark_only_lora_as_trainable, apply_lora, get_lora_parameters
+from .utils import mark_only_lora_as_trainable, apply_lora
 
-def freeze_model(m):
-    m.requires_grad_(False)
 
 def freeze_all_but_bn(m):
     if not isinstance(m, torch.nn.LayerNorm):
@@ -18,6 +17,25 @@ def freeze_all_but_bn(m):
             m.weight.requires_grad_(False)
         if hasattr(m, 'bias') and m.bias is not None:
             m.bias.requires_grad_(False)
+
+def lora_trainable(model, bias='all'):
+    for n, p in model.named_parameters():
+        if 'lora_' not in n:
+            p.requires_grad = False
+    if bias == 'none':
+        return
+    elif bias == 'all':
+        for n, p in model.named_parameters():
+            if 'bias' in n:
+                p.requires_grad = True
+    elif bias == 'lora_only':
+        for m in model.modules():
+            if isinstance(m, LoRALayer) and \
+                    hasattr(m, 'bias') and \
+                    m.bias is not None:
+                m.bias.requires_grad = True
+    else:
+        raise NotImplementedError
             
 
 class Model(pl.LightningModule):
@@ -26,12 +44,13 @@ class Model(pl.LightningModule):
 
         self.opts = opts
 
-
         self.dino = vit_base(patch_size=14, block_chunks=0, init_values=1.0) 
         apply_lora(self.opts, self.dino)
-        mark_only_lora_as_trainable(self.dino)
+        print("LoRA applied")
+        print(self.dino)
+        self.dino.apply(lora_trainable)
 
-        # Prompt Engineering
+        # Prompt Learning
         self.sk_prompt = nn.Parameter(torch.randn(self.opts.n_prompts, self.opts.prompt_dim))
         self.img_prompt = nn.Parameter(torch.randn(self.opts.n_prompts, self.opts.prompt_dim))
 
@@ -39,11 +58,12 @@ class Model(pl.LightningModule):
         self.best_metric = 1e3
 
     def configure_optimizers(self):
-        model_params = list(get_lora_parameters(self.dino))
+        model_params = list(self.dino.parameters())
 
-        optimizer = torch.optim.Adam([
-            {'params': model_params, 'lr': self.opts.encoder_lr},
-            {'params': [self.sk_prompt] + [self.img_prompt], 'lr': self.opts.prompt_lr}])
+        if self.opts.prompt_learning is not False:
+            model_params += [self.sk_prompt, self.img_prompt]
+
+        optimizer = torch.optim.Adam(model_params, lr=self.opts.encoder_lr)
         return optimizer
     
     def loss_fn_nx(self, z1, z2, temperature=0.5):
@@ -150,9 +170,11 @@ class Model(pl.LightningModule):
 
     def forward(self, data, dtype='image'):
         if dtype == 'image':
-            feat = self.dino(data, prompt=self.img_prompt.expand(data.shape[0], -1, -1))
+            feat = self.dino(data, prompt=self.img_prompt.expand(
+                data.shape[0], -1, -1) if self.opts.prompt_learning is not False else None)
         else:
-            feat = self.dino(data, prompt=self.sk_prompt.expand(data.shape[0], -1, -1))
+            feat = self.dino(data, prompt=self.sk_prompt.expand(
+                data.shape[0], -1, -1) if self.opts.prompt_learning is not False else None)
         return feat
 
     def training_step(self, batch, batch_idx):

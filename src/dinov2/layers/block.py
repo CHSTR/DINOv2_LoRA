@@ -63,7 +63,7 @@ class Block(nn.Module):
         ffn_layer: Callable[..., nn.Module] = Mlp,
     ) -> None:
         super().__init__()
-        # print(f"biases: qkv: {qkv_bias}, proj: {proj_bias}, ffn: {ffn_bias}")
+        print(f"biases: qkv: {qkv_bias}, proj: {proj_bias}, ffn: {ffn_bias}")
         self.norm1 = norm_layer(dim)
         self.attn = attn_class(
             dim,
@@ -91,8 +91,18 @@ class Block(nn.Module):
         self.sample_drop_ratio = drop_path
 
     def forward(self, x: Tensor) -> Tensor:
+        # print(f"Block: {x.shape}")
+        # def attn_residual_func(x: Tensor) -> Tensor:
+        #     print("self.attn", self.attn)
+        #     return self.ls1(self.attn(self.norm1(x),self.norm1(x),self.norm1(x))[0])
+
         def attn_residual_func(x: Tensor) -> Tensor:
-            return self.ls1(self.attn(self.norm1(x),self.norm1(x),self.norm1(x))[0])
+            if isinstance(self.attn, MemEffAttention):
+                attn_output = self.attn(self.norm1(x))[0]
+            else:
+                # PlainMultiheadAttentionLoRA
+                attn_output = self.attn(self.norm1(x), self.norm1(x), self.norm1(x))[0]
+            return self.ls1(attn_output)
 
         def ffn_residual_func(x: Tensor) -> Tensor:
             return self.ls2(self.mlp(self.norm2(x)))

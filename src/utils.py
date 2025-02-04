@@ -108,11 +108,11 @@ def get_lora_parameters(model, bias='none'):
     return params
 
 
-def apply_lora(args, clip_model):
+def apply_lora(args, model):
     list_lora_layers = []
     if args.encoder == 'text' or args.encoder == 'both':
         indices = INDEX_POSITIONS_TEXT[args.position]
-        text_encoder = clip_model.transformer
+        text_encoder = model.transformer
         for i, block in enumerate(text_encoder.resblocks):
             print(f"Residual Attention Block {i}: {block}")
             if i in indices:
@@ -125,7 +125,7 @@ def apply_lora(args, clip_model):
 
     if args.encoder == 'vision' or args.encoder == 'both':
         indices = INDEX_POSITIONS_VISION[args.backbone][args.position]
-        vision_encoder = clip_model
+        vision_encoder = model
         for i, block in enumerate(vision_encoder.blocks):
             print(f"Residual Attention Block {i}: {block}")
             if i in indices:
