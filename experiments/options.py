@@ -44,6 +44,7 @@ parser.add_argument('--dropout_rate', default=0.25, type=float, help='dropout ra
 # ----------------------
 # ViT Prompt Parameters
 # ----------------------
+parser.add_argument('--prompt_learning', action='store_true', default=False)
 parser.add_argument('--prompt_dim', type=int, default=768)
 parser.add_argument('--n_prompts', type=int, default=3)
 

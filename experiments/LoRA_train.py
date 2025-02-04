@@ -20,9 +20,9 @@ if __name__ == '__main__':
 
     # DocExplore
     train_dataset = Horae(
-        path="/home/chstr/dataset/list_horae_train.pkl", opts=opts, transform=dataset_transforms)
+        path="/list_horae_train.pkl", opts=opts, transform=dataset_transforms)
     val_dataset = Horae(
-        path="/home/chstr/dataset/list_horae_val.pkl", opts=opts, transform=dataset_transforms)
+        path="/list_horae_val.pkl", opts=opts, transform=dataset_transforms)
 
     train_loader = DataLoader(
         dataset=train_dataset, batch_size=opts.batch_size, num_workers=opts.workers, shuffle=True)
